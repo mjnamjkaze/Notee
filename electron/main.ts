@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join } from 'path'
 import Database from 'better-sqlite3'
 
@@ -82,12 +82,31 @@ function createDummyNote() {
 }
 
 function setupTray() {
-  // We'll add this later when we have an icon
+  const icon = nativeImage.createEmpty() // Temporary empty icon
+  tray = new Tray(icon)
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'New Note', click: () => {
+      createDummyNote()
+    } },
+    { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => {
+      app.setLoginItemSettings({
+        openAtLogin: item.checked,
+        path: app.getPath('exe')
+      })
+    } },
+    { type: 'separator' },
+    { label: 'Quit', click: () => {
+      app.quit()
+    } }
+  ])
+  tray.setToolTip('Notee')
+  tray.setContextMenu(contextMenu)
 }
 
 app.whenReady().then(() => {
   initDatabase()
   loadAllNotes()
+  setupTray()
 })
 
 app.on('window-all-closed', () => {

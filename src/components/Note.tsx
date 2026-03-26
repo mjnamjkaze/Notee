@@ -2,7 +2,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Image from '@tiptap/extension-image';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, Image as ImageIcon } from 'lucide-react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, Image as ImageIcon, Plus, X } from 'lucide-react';
 import { useCallback, useRef } from 'react';
 
 function useDebounce(callback: Function, delay: number) {
@@ -48,7 +48,24 @@ export default function Note({ note }: { note: any }) {
 
   return (
     <>
-      <div className="drag-region"></div>
+      <div className="drag-region">
+        <div style={{ position: 'absolute', top: 4, right: 8, zIndex: 999, WebkitAppRegion: 'no-drag' as any, display: 'flex', gap: '4px' }}>
+          <button 
+            onClick={() => window.ipcRenderer?.invoke('create-note')} 
+            style={{background:'transparent', border:'none', cursor:'pointer', padding: '2px'}}
+            title="New Note"
+          >
+            <Plus size={16} color="#666" />
+          </button>
+          <button 
+            onClick={() => window.ipcRenderer?.invoke('delete-note', note.id)} 
+            style={{background:'transparent', border:'none', cursor:'pointer', padding: '2px'}}
+            title="Delete Note"
+          >
+            <X size={16} color="#666" />
+          </button>
+        </div>
+      </div>
       
       <EditorContent editor={editor} />
       
