@@ -67,7 +67,7 @@ export default function Note({ note }: { note: any }) {
         </div>
       </div>
       
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }} />
       
       <div className="toolbar">
         <button 

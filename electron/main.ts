@@ -43,7 +43,7 @@ function createNoteWindow(note: any) {
     alwaysOnTop: note.isAlwaysOnTop === 1,
     skipTaskbar: true,
     webPreferences: {
-      preload: join(__dirname, 'preload.mjs'), // electron-vite compiles this
+      preload: join(__dirname, 'preload.js'), // electron-vite compiles this
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -86,7 +86,8 @@ function createDummyNote() {
 }
 
 function setupTray() {
-  const icon = nativeImage.createEmpty() // Temporary empty icon
+  const iconBase64 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAHhJREFUOE9jZKAQMKIpf+B//P9gA0hyDKgGoAk+HkRofhK+IQaAakCa/x/UgNPEKMMnzA1I8/+DmhFDEyI0g2sgYQ3QGpiGIMQGIBvBBwuh+f+hGkAG/0fTjOAZYh2AzUBC/mNDCDUD0hCEuAGj2YDU/CdG8wAzBQDTj0p0pU5E1gAAAABJRU5ErkJggg=='
+  const icon = nativeImage.createFromDataURL(iconBase64)
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: 'New Note', click: () => {

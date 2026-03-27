@@ -1,42 +1,62 @@
-import { BrowserWindow as e, Menu as t, Tray as n, app as r, ipcMain as i, nativeImage as a } from "electron";
-import { dirname as o, join as s } from "path";
-import { fileURLToPath as c } from "url";
-import l from "better-sqlite3";
+import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage } from "electron";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+import Database from "better-sqlite3";
 //#region electron/main.ts
-var u = o(c(import.meta.url)), d = null, f = null, p = process.env.VITE_DEV_SERVER_URL !== void 0;
-function m() {
-	d = new l(s(r.getPath("userData"), "notee.db")), d.pragma("journal_mode = WAL"), d.exec("\n    CREATE TABLE IF NOT EXISTS notes (\n      id TEXT PRIMARY KEY,\n      text TEXT,\n      x INTEGER,\n      y INTEGER,\n      width INTEGER,\n      height INTEGER,\n      color TEXT,\n      isAlwaysOnTop INTEGER DEFAULT 0\n    )\n  ");
+var __dirname = dirname(fileURLToPath(import.meta.url));
+var db = null;
+var tray = null;
+var isDev = process.env.VITE_DEV_SERVER_URL !== void 0;
+function initDatabase() {
+	db = new Database(join(app.getPath("userData"), "notee.db"));
+	db.pragma("journal_mode = WAL");
+	db.exec(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id TEXT PRIMARY KEY,
+      text TEXT,
+      x INTEGER,
+      y INTEGER,
+      width INTEGER,
+      height INTEGER,
+      color TEXT,
+      isAlwaysOnTop INTEGER DEFAULT 0
+    )
+  `);
 }
-var h = /* @__PURE__ */ new Map();
-function g(t) {
-	let n = new e({
-		width: t.width || 300,
-		height: t.height || 300,
-		x: t.x,
-		y: t.y,
-		frame: !1,
-		transparent: !0,
-		alwaysOnTop: t.isAlwaysOnTop === 1,
-		skipTaskbar: !0,
+var noteWindows = /* @__PURE__ */ new Map();
+function createNoteWindow(note) {
+	const noteWin = new BrowserWindow({
+		width: note.width || 300,
+		height: note.height || 300,
+		x: note.x,
+		y: note.y,
+		frame: false,
+		transparent: true,
+		alwaysOnTop: note.isAlwaysOnTop === 1,
+		skipTaskbar: true,
 		webPreferences: {
-			preload: s(u, "preload.mjs"),
-			nodeIntegration: !1,
-			contextIsolation: !0
+			preload: join(__dirname, "preload.js"),
+			nodeIntegration: false,
+			contextIsolation: true
 		}
-	}), r = p ? `${process.env.VITE_DEV_SERVER_URL}#note/${t.id}` : `file://${s(u, "../dist/index.html")}#note/${t.id}`;
-	n.loadURL(r), h.set(t.id, n), n.on("closed", () => {
-		h.delete(t.id);
+	});
+	const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#note/${note.id}` : `file://${join(__dirname, "../dist/index.html")}#note/${note.id}`;
+	noteWin.loadURL(url);
+	noteWindows.set(note.id, noteWin);
+	noteWin.on("closed", () => {
+		noteWindows.delete(note.id);
 	});
 }
-function _() {
-	if (!d) return;
-	let e = d.prepare("SELECT * FROM notes").all();
-	e.length === 0 ? v() : e.forEach((e) => {
-		g(e);
+function loadAllNotes() {
+	if (!db) return;
+	const notes = db.prepare("SELECT * FROM notes").all();
+	if (notes.length === 0) createDummyNote();
+	else notes.forEach((note) => {
+		createNoteWindow(note);
 	});
 }
-function v() {
-	let e = {
+function createDummyNote() {
+	const newNote = {
 		id: Date.now().toString(),
 		text: "",
 		x: 100,
@@ -46,25 +66,26 @@ function v() {
 		color: "#fdfd96",
 		isAlwaysOnTop: 0
 	};
-	d.prepare("INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)").run(e), g(e);
+	db.prepare("INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)").run(newNote);
+	createNoteWindow(newNote);
 }
-function y() {
-	f = new n(a.createEmpty());
-	let e = t.buildFromTemplate([
+function setupTray() {
+	tray = new Tray(nativeImage.createFromDataURL("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAHhJREFUOE9jZKAQMKIpf+B//P9gA0hyDKgGoAk+HkRofhK+IQaAakCa/x/UgNPEKMMnzA1I8/+DmhFDEyI0g2sgYQ3QGpiGIMQGIBvBBwuh+f+hGkAG/0fTjOAZYh2AzUBC/mNDCDUD0hCEuAGj2YDU/CdG8wAzBQDTj0p0pU5E1gAAAABJRU5ErkJggg=="));
+	const contextMenu = Menu.buildFromTemplate([
 		{
 			label: "New Note",
 			click: () => {
-				v();
+				createDummyNote();
 			}
 		},
 		{
 			label: "Start with Windows",
 			type: "checkbox",
-			checked: r.getLoginItemSettings().openAtLogin,
-			click: (e) => {
-				r.setLoginItemSettings({
-					openAtLogin: e.checked,
-					path: r.getPath("exe")
+			checked: app.getLoginItemSettings().openAtLogin,
+			click: (item) => {
+				app.setLoginItemSettings({
+					openAtLogin: item.checked,
+					path: app.getPath("exe")
 				});
 			}
 		},
@@ -72,16 +93,25 @@ function y() {
 		{
 			label: "Quit",
 			click: () => {
-				r.quit();
+				app.quit();
 			}
 		}
 	]);
-	f.setToolTip("Notee"), f.setContextMenu(e);
+	tray.setToolTip("Notee");
+	tray.setContextMenu(contextMenu);
 }
-r.whenReady().then(() => {
-	m(), _(), y();
-}), r.on("window-all-closed", () => {}), i.handle("get-note", (e, t) => d ? d.prepare("SELECT * FROM notes WHERE id = ?").get(t) : null), i.handle("create-note", () => {
-	let e = {
+app.whenReady().then(() => {
+	initDatabase();
+	loadAllNotes();
+	setupTray();
+});
+app.on("window-all-closed", () => {});
+ipcMain.handle("get-note", (event, id) => {
+	if (!db) return null;
+	return db.prepare("SELECT * FROM notes WHERE id = ?").get(id);
+});
+ipcMain.handle("create-note", () => {
+	const newNote = {
 		id: Date.now().toString(),
 		text: "",
 		x: 100,
@@ -91,13 +121,18 @@ r.whenReady().then(() => {
 		color: "#fdfd96",
 		isAlwaysOnTop: 0
 	};
-	return d.prepare("INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)").run(e), g(e), e;
-}), i.handle("update-note", (e, t) => {
-	d && d.prepare("UPDATE notes SET text=@text, x=@x, y=@y, width=@width, height=@height, color=@color, isAlwaysOnTop=@isAlwaysOnTop WHERE id=@id").run(t);
-}), i.handle("delete-note", (e, t) => {
-	if (!d) return;
-	d.prepare("DELETE FROM notes WHERE id=?").run(t);
-	let n = h.get(t);
-	n && n.close();
+	db.prepare("INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)").run(newNote);
+	createNoteWindow(newNote);
+	return newNote;
+});
+ipcMain.handle("update-note", (event, note) => {
+	if (!db) return;
+	db.prepare("UPDATE notes SET text=@text, x=@x, y=@y, width=@width, height=@height, color=@color, isAlwaysOnTop=@isAlwaysOnTop WHERE id=@id").run(note);
+});
+ipcMain.handle("delete-note", (event, id) => {
+	if (!db) return;
+	db.prepare("DELETE FROM notes WHERE id=?").run(id);
+	const win = noteWindows.get(id);
+	if (win) win.close();
 });
 //#endregion
