@@ -6,10 +6,10 @@ import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, Image as
 import { useCallback, useRef } from 'react';
 
 function useDebounce(callback: Function, delay: number) {
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<number | null>(null);
   return useCallback((...args: any[]) => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    timeoutRef.current = setTimeout(() => {
+    timeoutRef.current = window.setTimeout(() => {
       callback(...args);
     }, delay);
   }, [callback, delay]);
@@ -49,7 +49,7 @@ export default function Note({ note }: { note: any }) {
   return (
     <>
       <div className="drag-region">
-        <div style={{ position: 'absolute', top: 4, right: 8, zIndex: 999, WebkitAppRegion: 'no-drag' as any, display: 'flex', gap: '4px' }}>
+        <div className="no-drag-region" style={{ position: 'absolute', top: 4, right: 8, zIndex: 999, display: 'flex', gap: '4px' }}>
           <button 
             onClick={() => window.ipcRenderer?.invoke('create-note')} 
             style={{background:'transparent', border:'none', cursor:'pointer', padding: '2px'}}

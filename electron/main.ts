@@ -1,6 +1,10 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import Database from 'better-sqlite3'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 let db: Database.Database | null = null
 let tray: Tray | null = null
@@ -110,9 +114,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // Do nothing. Keep the app running in the background for the system tray.
 })
 
 // IPC Handlers

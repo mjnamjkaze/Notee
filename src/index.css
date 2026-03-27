@@ -1,3 +1,7 @@
+.no-drag-region {
+  -webkit-app-region: no-drag;
+}
+
 body {
   margin: 0;
   padding: 0;
