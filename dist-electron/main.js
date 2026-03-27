@@ -1,6 +1,6 @@
 import { BrowserWindow, Menu, Tray, app, ipcMain, nativeImage } from "electron";
 import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import Database from "better-sqlite3";
 //#region electron/main.ts
 var __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,8 +40,13 @@ function createNoteWindow(note) {
 			contextIsolation: true
 		}
 	});
-	const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#note/${note.id}` : `file://${join(__dirname, "../dist/index.html")}#note/${note.id}`;
+	const prodUrl = pathToFileURL(join(__dirname, "../dist/index.html")).href + `#note/${note.id}`;
+	const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#note/${note.id}` : prodUrl;
 	noteWin.loadURL(url);
+	noteWin.webContents.on("console-message", (event, level, message, line, sourceId) => {
+		console.log(`[Window Console] Level ${level}: ${message} (Line: ${line})`);
+	});
+	if (isDev) noteWin.webContents.openDevTools({ mode: "detach" });
 	noteWindows.set(note.id, noteWin);
 	noteWin.on("closed", () => {
 		noteWindows.delete(note.id);

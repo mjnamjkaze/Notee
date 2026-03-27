@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
 import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import Database from 'better-sqlite3'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -49,8 +49,19 @@ function createNoteWindow(note: any) {
     },
   })
 
-  const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#note/${note.id}` : `file://${join(__dirname, '../dist/index.html')}#note/${note.id}`
+  const distPath = join(__dirname, '../dist/index.html')
+  const prodUrl = pathToFileURL(distPath).href + `#note/${note.id}`
+  const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#note/${note.id}` : prodUrl
+  
   noteWin.loadURL(url)
+
+  noteWin.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Window Console] Level ${level}: ${message} (Line: ${line})`)
+  })
+
+  if (isDev) {
+    noteWin.webContents.openDevTools({ mode: 'detach' })
+  }
 
   noteWindows.set(note.id, noteWin)
 
