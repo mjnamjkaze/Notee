@@ -1,5 +1,6 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } from 'electron'
 import { join, dirname } from 'path'
+import { readFileSync } from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
 import Database from 'better-sqlite3'
 
@@ -25,9 +26,15 @@ function initDatabase() {
       width INTEGER,
       height INTEGER,
       color TEXT,
-      isAlwaysOnTop INTEGER DEFAULT 0
+      isAlwaysOnTop INTEGER DEFAULT 0,
+      isDeleted INTEGER DEFAULT 0
     )
   `)
+  try {
+    db.exec(`ALTER TABLE notes ADD COLUMN isDeleted INTEGER DEFAULT 0`)
+  } catch (e) {
+    // Column already exists
+  }
 }
 
 const noteWindows: Map<string, BrowserWindow> = new Map()
@@ -61,8 +68,6 @@ function createNoteWindow(note: any) {
 
   if (isDev) {
     noteWin.webContents.openDevTools({ mode: 'detach' })
-  } else {
-    noteWin.webContents.openDevTools({ mode: 'detach' }) // Force in prod for debugging
   }
 
   noteWindows.set(note.id, noteWin)
@@ -74,7 +79,7 @@ function createNoteWindow(note: any) {
 
 function loadAllNotes() {
   if (!db) return
-  const notes = db.prepare('SELECT * FROM notes').all()
+  const notes = db.prepare('SELECT * FROM notes WHERE isDeleted = 0').all()
   if (notes.length === 0) {
     // Create one default note if empty
     createDummyNote()
@@ -92,10 +97,41 @@ function createDummyNote() {
     text: '',
     x: 100, y: 100, width: 300, height: 300,
     color: '#fdfd96', // yellow
-    isAlwaysOnTop: 0
+    isAlwaysOnTop: 0,
+    isDeleted: 0
   }
-  db!.prepare('INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)').run(newNote)
+  db!.prepare('INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop, isDeleted) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop, @isDeleted)').run(newNote)
   createNoteWindow(newNote)
+}
+
+// Trash Window Manager
+let trashWin: BrowserWindow | null = null
+function openTrashWindow() {
+  if (trashWin) {
+    trashWin.focus()
+    return
+  }
+  trashWin = new BrowserWindow({
+    width: 600, height: 500,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: join(__dirname, 'preload.cjs'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    }
+  })
+  const distPath = join(__dirname, '../dist/index.html')
+  const prodUrl = pathToFileURL(distPath).href + '#trash'
+  const url = isDev ? `${process.env.VITE_DEV_SERVER_URL}#trash` : prodUrl
+  trashWin.loadURL(url)
+  
+  if (isDev) {
+    trashWin.webContents.openDevTools({ mode: 'detach' })
+  }
+
+  trashWin.on('closed', () => {
+    trashWin = null
+  })
 }
 
 function setupTray() {
@@ -104,7 +140,22 @@ function setupTray() {
   tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: 'New Note', click: () => {
-      createDummyNote()
+      // Use IPC logic to create a note, actually createDummyNote is fine if DB is empty,
+      // but let's emulate what IPC create-note does to get staggering.
+      const lastWin = Array.from(noteWindows.values()).pop()
+      let x = 100, y = 100
+      if (lastWin) {
+        const [wx, wy] = lastWin.getPosition()
+        x = wx + 30
+        y = wy + 30
+      }
+      const id = Date.now().toString()
+      const newNote = { id, text: '', x, y, width: 300, height: 300, color: '#fdfd96', isAlwaysOnTop: 0, isDeleted: 0 }
+      db!.prepare('INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop, isDeleted) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop, @isDeleted)').run(newNote)
+      createNoteWindow(newNote)
+    } },
+    { label: 'Trash Bin', click: () => {
+      openTrashWindow()
     } },
     { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (item) => {
       app.setLoginItemSettings({
@@ -139,26 +190,76 @@ ipcMain.handle('get-note', (event, id) => {
 
 ipcMain.handle('create-note', () => {
   const id = Date.now().toString()
+  let x = 100, y = 100
+  if (noteWindows.size > 0) {
+    let maxX = 0, maxY = 0
+    for (const win of noteWindows.values()) {
+      const [wx, wy] = win.getPosition()
+      if (wx > maxX) maxX = wx
+      if (wy > maxY) maxY = wy
+    }
+    x = maxX + 30
+    y = maxY + 30
+  }
+  
   const newNote = {
     id,
     text: '',
-    x: 100, y: 100, width: 300, height: 300,
+    x, y, width: 300, height: 300,
     color: '#fdfd96',
-    isAlwaysOnTop: 0
+    isAlwaysOnTop: 0,
+    isDeleted: 0
   }
-  db!.prepare('INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop)').run(newNote)
+  db!.prepare('INSERT INTO notes (id, text, x, y, width, height, color, isAlwaysOnTop, isDeleted) VALUES (@id, @text, @x, @y, @width, @height, @color, @isAlwaysOnTop, @isDeleted)').run(newNote)
   createNoteWindow(newNote)
   return newNote
 })
 
 ipcMain.handle('update-note', (event, note) => {
   if (!db) return
+  // Prevent missing column errors during update
   db.prepare('UPDATE notes SET text=@text, x=@x, y=@y, width=@width, height=@height, color=@color, isAlwaysOnTop=@isAlwaysOnTop WHERE id=@id').run(note)
 })
 
 ipcMain.handle('delete-note', (event, id) => {
   if (!db) return
-  db.prepare('DELETE FROM notes WHERE id=?').run(id)
+  db.prepare('UPDATE notes SET isDeleted=1 WHERE id=?').run(id)
   const win = noteWindows.get(id)
   if (win) win.close()
+  
+  // Refresh trash window if open
+  if (trashWin) trashWin.webContents.send('trash-updated')
+})
+
+ipcMain.handle('get-deleted-notes', () => {
+  if (!db) return []
+  return db.prepare('SELECT * FROM notes WHERE isDeleted=1').all()
+})
+
+ipcMain.handle('restore-note', (event, id) => {
+  if (!db) return
+  db.prepare('UPDATE notes SET isDeleted=0 WHERE id=?').run(id)
+  const note = db.prepare('SELECT * FROM notes WHERE id=?').get(id)
+  if (note) createNoteWindow(note)
+  if (trashWin) trashWin.webContents.send('trash-updated')
+})
+
+ipcMain.handle('hard-delete-note', (event, id) => {
+  if (!db) return
+  db.prepare('DELETE FROM notes WHERE id=?').run(id)
+  if (trashWin) trashWin.webContents.send('trash-updated')
+})
+
+ipcMain.handle('select-image', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif', 'webp', 'jpeg'] }]
+  })
+  if (canceled || filePaths.length === 0) return null
+  
+  const buffer = readFileSync(filePaths[0])
+  const ext = filePaths[0].split('.').pop()?.toLowerCase() || 'jpeg'
+  const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : ext === 'gif' ? 'image/gif' : 'image/jpeg'
+  
+  return `data:${mimeType};base64,${buffer.toString('base64')}`
 })

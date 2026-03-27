@@ -2,8 +2,8 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Image from '@tiptap/extension-image';
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, Image as ImageIcon, Plus, X } from 'lucide-react';
-import { useCallback, useRef } from 'react';
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, List, Image as ImageIcon, Plus, X, Palette } from 'lucide-react';
+import { useCallback, useRef, useEffect } from 'react';
 
 function useDebounce(callback: Function, delay: number) {
   const timeoutRef = useRef<number | null>(null);
@@ -16,14 +16,24 @@ function useDebounce(callback: Function, delay: number) {
 }
 
 export default function Note({ note }: { note: any }) {
-  const saveNote = useDebounce((html: string) => {
+  const saveNote = useDebounce((updatedNote: any) => {
     if (window.ipcRenderer) {
-      window.ipcRenderer.invoke('update-note', {
-        ...note,
-        text: html
-      });
+      window.ipcRenderer.invoke('update-note', updatedNote);
     }
   }, 500);
+
+  useEffect(() => {
+    if (note.color) {
+      const root = document.getElementById('root');
+      if (root) root.style.background = note.color;
+    }
+  }, [note.color]);
+
+  const handleColorChange = (color: string) => {
+    const root = document.getElementById('root');
+    if (root) root.style.background = color;
+    saveNote({ ...note, color }); // this debounces automatically
+  };
 
   const editor = useEditor({
     extensions: [
@@ -38,7 +48,7 @@ export default function Note({ note }: { note: any }) {
       }
     },
     onUpdate: ({ editor }) => {
-      saveNote(editor.getHTML());
+      saveNote({ ...note, text: editor.getHTML() });
     }
   });
 
@@ -102,15 +112,28 @@ export default function Note({ note }: { note: any }) {
         </button>
         <button 
           className="toolbar-btn"
-          onClick={() => {
-            const url = window.prompt('Image URL:');
-            if (url) {
-              editor.chain().focus().setImage({ src: url }).run();
+          onClick={async () => {
+            if (window.ipcRenderer) {
+              const base64 = await window.ipcRenderer.invoke('select-image');
+              if (base64) editor.chain().focus().setImage({ src: base64 }).run();
+            } else {
+              const url = window.prompt('Image URL:');
+              if (url) editor.chain().focus().setImage({ src: url }).run();
             }
           }}
+          title="Upload Image"
         >
           <ImageIcon />
         </button>
+        <div className="toolbar-btn" style={{ position: 'relative', overflow: 'hidden' }} title="Change Color">
+          <Palette size={16} />
+          <input 
+            type="color" 
+            value={note.color || '#fdfd96'} 
+            onChange={(e) => handleColorChange(e.target.value)}
+            style={{ position: 'absolute', opacity: 0, top: 0, left: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+          />
+        </div>
       </div>
     </>
   );
