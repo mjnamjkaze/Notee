@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('ipcRenderer', {
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),

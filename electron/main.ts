@@ -43,7 +43,7 @@ function createNoteWindow(note: any) {
     alwaysOnTop: note.isAlwaysOnTop === 1,
     skipTaskbar: true,
     webPreferences: {
-      preload: join(__dirname, 'preload.js'), // electron-vite compiles this
+      preload: join(__dirname, 'preload.cjs'), // electron-vite compiles this
       nodeIntegration: false,
       contextIsolation: true,
     },
@@ -61,6 +61,8 @@ function createNoteWindow(note: any) {
 
   if (isDev) {
     noteWin.webContents.openDevTools({ mode: 'detach' })
+  } else {
+    noteWin.webContents.openDevTools({ mode: 'detach' }) // Force in prod for debugging
   }
 
   noteWindows.set(note.id, noteWin)

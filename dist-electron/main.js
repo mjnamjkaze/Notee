@@ -19,14 +19,14 @@ function _(t) {
 		alwaysOnTop: t.isAlwaysOnTop === 1,
 		skipTaskbar: !0,
 		webPreferences: {
-			preload: s(d, "preload.js"),
+			preload: s(d, "preload.cjs"),
 			nodeIntegration: !1,
 			contextIsolation: !0
 		}
 	}), r = l(s(d, "../dist/index.html")).href + `#note/${t.id}`, i = m ? `${process.env.VITE_DEV_SERVER_URL}#note/${t.id}` : r;
 	n.loadURL(i), n.webContents.on("console-message", (e, t, n, r, i) => {
 		console.log(`[Window Console] Level ${t}: ${n} (Line: ${r})`);
-	}), m && n.webContents.openDevTools({ mode: "detach" }), g.set(t.id, n), n.on("closed", () => {
+	}), n.webContents.openDevTools({ mode: "detach" }), g.set(t.id, n), n.on("closed", () => {
 		g.delete(t.id);
 	});
 }
